@@ -1,7 +1,7 @@
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, MessageCircle, QrCode, Check, Loader2 } from "lucide-react";
+import { ArrowLeft, MessageCircle, QrCode, Check, Loader as Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
