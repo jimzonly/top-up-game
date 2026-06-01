@@ -166,7 +166,22 @@ export default function HomePage() {
             return (
               <Link
                 key={p.id}
-                to={`/games/${slug}`}
+                to={`/checkout?productId=${p.id}`}
+                state={{
+                  product: {
+                    id: p.id,
+                    name: p.name,
+                    price: p.price,
+                    price_per_unit: p.price_per_unit,
+                    product_type: p.product_type,
+                    min_quantity: p.min_quantity,
+                    description: p.description,
+                    image_url: p.image_url,
+                    game_id: p.game_id,
+                    game_name: game?.name,
+                    game_slug: game?.slug,
+                  },
+                }}
                 className="group glass rounded-2xl overflow-hidden hover-glow"
               >
                 <div className="aspect-[4/3] overflow-hidden relative">
