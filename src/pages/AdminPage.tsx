@@ -157,14 +157,10 @@ export default function AdminPage() {
     queryFn: () => adminListGames(),
   });
 
-  console.log("[AdminPage] games:", games.length, "| loading:", gamesLoading, "| error:", gamesError?.message ?? "none");
-
   const { data: products = [], isLoading: productsLoading } = useQuery({
     queryKey: ["admin-products"],
     queryFn: () => adminListProducts(),
   });
-
-  console.log("[AdminPage] products:", products.length, "| loading:", productsLoading);
 
   const handleStatusChange = async (txId: string, newStatus: string) => {
     try {
