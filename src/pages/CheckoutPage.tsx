@@ -8,10 +8,11 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { formatIDR, gameImage } from "@/lib/games";
+import { createTransaction } from "@/lib/topup.functions";
 import { useAuth } from "@/hooks/use-auth";
 import { QrisModal } from "@/components/qris-modal";
 
-const WA_NUMBER = "6289539223044";
+const WA_NUMBER = "62895392230443";
 
 interface CheckoutProduct {
   id: string;
@@ -38,6 +39,7 @@ export default function CheckoutPage() {
   const [product, setProduct] = useState<CheckoutProduct | null>(productFromState ?? null);
   const [userGameId, setUserGameId] = useState("");
   const [serverId, setServerId] = useState("");
+  const [userInput, setUserInput] = useState("");
   const [requiresServerId, setRequiresServerId] = useState(false);
   const [userIdLabel, setUserIdLabel] = useState("User ID");
   const [quantity, setQuantity] = useState(1);
@@ -46,7 +48,6 @@ export default function CheckoutPage() {
   const [orderId, setOrderId] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Fetch product from DB if not passed via state
   const { isLoading: fetchingProduct } = useQuery({
     queryKey: ["product-checkout", productIdFromSearch],
     queryFn: async () => {
@@ -81,7 +82,6 @@ export default function CheckoutPage() {
     enabled: !productFromState && !!productIdFromSearch,
   });
 
-  // Fetch game details when product is from state
   useEffect(() => {
     if (!productFromState) return;
     supabase
@@ -97,6 +97,7 @@ export default function CheckoutPage() {
   }, [productFromState]);
 
   const isCustomQty = product?.product_type === "followers" || product?.product_type === "likes";
+  const isSocialMedia = isCustomQty;
   const effectiveQty = isCustomQty ? quantity : 1;
   const totalPrice = isCustomQty && product?.price_per_unit != null
     ? Number(product.price_per_unit) * effectiveQty
@@ -117,29 +118,19 @@ export default function CheckoutPage() {
 
     setSubmitting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Not authenticated");
-
-      const oid = `NT${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-      const cost = 0;
-      const { error } = await supabase.from("transactions").insert({
-        order_id: oid,
-        user_id: session.user.id,
-        game_id: product.game_id,
-        product_id: product.id,
-        user_game_id: userGameId.trim(),
-        server_id: serverId.trim() || null,
-        amount: totalPrice,
-        cost,
-        profit: totalPrice - cost,
-        payment_method: "qris",
-        status: "waiting_payment",
+      const res = await createTransaction({
+        gameId: product.game_id,
+        productId: product.id,
+        userGameId: userGameId.trim(),
+        serverId: serverId.trim() || null,
+        paymentMethod: "qris",
         quantity: effectiveQty,
+        userInput: userInput.trim() || null,
       });
-      if (error) throw new Error(error.message);
-      setOrderId(oid);
+      setOrderId(res.orderId);
       setOrdered(true);
-      toast.success(`Order ${oid} berhasil dibuat!`);
+      setQrisOpen(true);
+      toast.success(`Order ${res.orderId} berhasil dibuat!`);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Gagal membuat order");
     } finally {
@@ -149,16 +140,13 @@ export default function CheckoutPage() {
 
   const buildWaMessage = () => {
     const priceStr = formatIDR(totalPrice);
-    const qtyStr = isCustomQty ? `\nJumlah: ${effectiveQty.toLocaleString()}` : "";
-    const orderStr = orderId ? `\nOrder ID: ${orderId}` : "";
-    const msg = `Halo Admin JimzStore, saya sudah melakukan pembayaran.\n\nProduk: ${product?.name}${qtyStr}\nHarga: ${priceStr}${orderStr}\n\nBerikut bukti pembayaran saya.`;
+    const msg = `Halo Admin JimzStore, Saya sudah melakukan pembayaran.\n\nProduk: ${product?.name} Harga: ${priceStr}\n\nBerikut bukti pembayaran saya.`;
     return encodeURIComponent(msg);
   };
 
   const handleSendProof = () => {
     if (!product) return;
-    const msg = buildWaMessage();
-    window.open(`https://wa.me/${WA_NUMBER}?text=${msg}`, "_blank");
+    window.open(`https://wa.me/${WA_NUMBER}?text=${buildWaMessage()}`, "_blank");
   };
 
   if (fetchingProduct) {
@@ -196,7 +184,6 @@ export default function CheckoutPage() {
             </p>
           </div>
 
-          {/* Order summary */}
           <div className="glass rounded-2xl p-4 text-left space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Produk</span>
@@ -222,7 +209,7 @@ export default function CheckoutPage() {
               <QrCode className="h-5 w-5" /> Lihat QRIS &amp; Bayar
             </Button>
             <Button
-              className="w-full h-12 gap-2 bg-[oklch(0.72_0.18_155)] text-[oklch(0.12_0.04_160)] hover:opacity-90 font-semibold"
+              className="w-full h-12 gap-2 bg-emerald-600 hover:bg-emerald-500 border-emerald-500 text-white font-semibold"
               onClick={handleSendProof}
             >
               <MessageCircle className="h-5 w-5" /> Kirim Bukti Pembayaran
@@ -242,7 +229,6 @@ export default function CheckoutPage() {
 
   return (
     <div className="container mx-auto px-4 py-10 pb-24 max-w-2xl">
-      {/* Back */}
       <button
         onClick={() => navigate(-1)}
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
@@ -305,10 +291,22 @@ export default function CheckoutPage() {
                 />
               </div>
             )}
+            {isSocialMedia && (
+              <div>
+                <Label className="text-sm">Profile URL / Username</Label>
+                <Input
+                  value={userInput}
+                  onChange={(e) => setUserInput(e.target.value)}
+                  placeholder="e.g. https://instagram.com/yourusername"
+                  className="mt-1"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">Pastikan akun kamu publik sebelum order.</p>
+              </div>
+            )}
           </div>
         </section>
 
-        {/* Quantity for custom products */}
+        {/* Quantity */}
         {isCustomQty && (
           <section className="glass-strong rounded-2xl p-5">
             <h2 className="text-xs uppercase tracking-widest text-[var(--neon)] mb-4 font-semibold">Jumlah</h2>
@@ -317,7 +315,7 @@ export default function CheckoutPage() {
                 <button
                   type="button"
                   onClick={() => setQuantity(Math.max(product.min_quantity ?? 1, quantity - (product.min_quantity ?? 1)))}
-                  className="grid h-10 w-10 place-items-center rounded-xl glass border border-border/50 hover:border-[var(--neon)]/50 transition"
+                  className="grid h-10 w-10 place-items-center rounded-xl glass border border-border/50 hover:border-[var(--neon)]/50 transition text-white"
                   disabled={quantity <= (product.min_quantity ?? 1)}
                 >
                   -
@@ -331,7 +329,7 @@ export default function CheckoutPage() {
                 <button
                   type="button"
                   onClick={() => setQuantity(quantity + (product.min_quantity ?? 1))}
-                  className="grid h-10 w-10 place-items-center rounded-xl glass border border-border/50 hover:border-[var(--neon)]/50 transition"
+                  className="grid h-10 w-10 place-items-center rounded-xl glass border border-border/50 hover:border-[var(--neon)]/50 transition text-white"
                 >
                   +
                 </button>
@@ -384,7 +382,6 @@ export default function CheckoutPage() {
           </dl>
         </section>
 
-        {/* CTA */}
         <Button
           onClick={handleOrder}
           disabled={submitting || !userGameId.trim() || (requiresServerId && !serverId.trim())}
@@ -393,7 +390,7 @@ export default function CheckoutPage() {
           {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Buat Order & Bayar Sekarang"}
         </Button>
         <p className="text-xs text-muted-foreground text-center pb-4">
-          Setelah membuat order, kamu akan diarahkan ke halaman pembayaran QRIS.
+          Setelah membuat order, QRIS akan otomatis terbuka.
         </p>
       </div>
 

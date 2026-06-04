@@ -10,68 +10,39 @@ export async function listGames(opts?: { popularOnly?: boolean }) {
       .order("name");
     if (opts?.popularOnly) q = q.eq("is_popular", true);
     const { data, error } = await q;
-    if (error) {
-      console.error("[listGames] error:", error.message);
-      return [];
-    }
-    console.log("[listGames] fetched:", (data ?? []).length, "games");
+    if (error) return [];
     return data ?? [];
-  } catch (err) {
-    console.error("[listGames] UNHANDLED:", err);
+  } catch {
     return [];
   }
 }
 
 export async function listActiveProducts() {
-  console.log("[listActiveProducts] START");
-
   try {
-    // Step 1: fetch products raw
     const productsRes = await supabase
       .from("products")
       .select("id, game_id, name, price, image_url, description, product_type, price_per_unit, min_quantity, sort_order")
       .eq("is_active", true)
       .order("sort_order");
 
-    console.log("[listActiveProducts] products raw:", productsRes.data?.length ?? 0, "rows, error:", productsRes.error?.message ?? "none");
-
-    if (productsRes.error) {
-      console.error("[listActiveProducts] PRODUCTS QUERY FAILED:", productsRes.error);
-      return [];
-    }
+    if (productsRes.error) return [];
 
     const rawProducts = productsRes.data ?? [];
-    if (rawProducts.length === 0) {
-      console.warn("[listActiveProducts] No active products found in DB");
-      return [];
-    }
+    if (rawProducts.length === 0) return [];
 
-    // Step 2: fetch games for lookup
     const gamesRes = await supabase
       .from("games")
       .select("id, slug, name, category, image_url")
       .eq("is_active", true);
 
-    console.log("[listActiveProducts] games raw:", gamesRes.data?.length ?? 0, "rows, error:", gamesRes.error?.message ?? "none");
+    if (gamesRes.error) return rawProducts.map((p) => ({ ...p, games: null }));
 
-    if (gamesRes.error) {
-      console.error("[listActiveProducts] GAMES QUERY FAILED:", gamesRes.error);
-      // Still return products without game info rather than nothing
-      return rawProducts.map((p) => ({ ...p, games: null }));
-    }
-
-    // Step 3: merge
     const gameMap = new Map((gamesRes.data ?? []).map((g) => [g.id, g]));
-    const products = rawProducts.map((p) => ({
+    return rawProducts.map((p) => ({
       ...p,
       games: gameMap.get(p.game_id) ?? null,
     }));
-
-    console.log("[listActiveProducts] DONE:", products.length, "products merged");
-    console.log("[listActiveProducts] sample:", JSON.stringify(products[0]));
-    return products;
-  } catch (err) {
-    console.error("[listActiveProducts] UNHANDLED ERROR:", err);
+  } catch {
     return [];
   }
 }
@@ -92,7 +63,6 @@ export async function getGameWithProducts(slug: string) {
     .eq("is_active", true)
     .order("sort_order");
   if (pe) throw new Error(pe.message);
-  console.log("[getGameWithProducts] game:", game.name, "products:", (products ?? []).length);
   return { game, products: products ?? [] };
 }
 
@@ -169,11 +139,10 @@ export async function listMyTransactions() {
 export async function getMyProfile() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Not authenticated");
-  const userId = session.user.id;
   const { data: profile, error } = await supabase
     .from("profiles")
     .select("display_name")
-    .eq("id", userId)
+    .eq("id", session.user.id)
     .maybeSingle();
   if (error) throw new Error(error.message);
   return { displayName: profile?.display_name ?? null };
@@ -191,7 +160,6 @@ export async function checkIsAdmin(): Promise<boolean> {
   return data.role === "admin";
 }
 
-// Admin functions
 export async function adminListTransactions() {
   const { data, error } = await supabase
     .from("transactions")
@@ -210,83 +178,44 @@ export async function adminUpdateTransactionStatus(id: string, status: string) {
 }
 
 export async function adminListGames() {
-  console.log("[adminListGames] START");
-
   try {
-    // Primary: try admin query (all games)
-    const { data, error } = await supabase
-      .from("games")
-      .select("*")
-      .order("name");
+    const { data, error } = await supabase.from("games").select("*").order("name");
+    if (!error && data && data.length > 0) return data;
 
-    console.log("[adminListGames] primary:", data?.length ?? 0, "rows, error:", error?.message ?? "none");
-
-    if (!error && data && data.length > 0) {
-      return data;
-    }
-
-    if (error) {
-      console.warn("[adminListGames] primary failed, trying fallback:", error.message);
-    } else if (data?.length === 0) {
-      console.warn("[adminListGames] primary returned 0 rows, trying fallback");
-    }
-
-    // Fallback: public query (active games only) - works for any auth state
     const fallback = await supabase
       .from("games")
       .select("id, slug, name, publisher, category, image_url, is_popular, is_active, requires_server_id, user_id_label")
       .eq("is_active", true)
       .order("name");
 
-    console.log("[adminListGames] fallback:", fallback.data?.length ?? 0, "rows, error:", fallback.error?.message ?? "none");
-
-    if (fallback.error) {
-      console.error("[adminListGames] fallback also failed:", fallback.error);
-      return [];
-    }
-
+    if (fallback.error) return [];
     return fallback.data ?? [];
-  } catch (err) {
-    console.error("[adminListGames] UNHANDLED:", err);
+  } catch {
     return [];
   }
 }
 
 export async function adminListProducts() {
-  console.log("[adminListProducts] START");
   try {
     const [productsRes, gamesRes] = await Promise.all([
       supabase
         .from("products")
         .select("id, name, description, image_url, price, cost, is_active, sort_order, game_id, product_type, min_quantity, price_per_unit")
         .order("created_at", { ascending: false }),
-      supabase
-        .from("games")
-        .select("id, slug, name, category"),
+      supabase.from("games").select("id, slug, name, category"),
     ]);
 
-    console.log("[adminListProducts] products:", productsRes.data?.length ?? 0, "| error:", productsRes.error?.message ?? "none");
-    console.log("[adminListProducts] games:", gamesRes.data?.length ?? 0, "| error:", gamesRes.error?.message ?? "none");
+    if (productsRes.error) return [];
 
-    if (productsRes.error) {
-      console.error("[adminListProducts] products error:", productsRes.error);
-      return [];
-    }
-
-    // If games fail, still return products without game info
     const gameMap = gamesRes.error
       ? new Map()
       : new Map((gamesRes.data ?? []).map((g) => [g.id, g]));
 
-    const products = (productsRes.data ?? []).map((p) => ({
+    return (productsRes.data ?? []).map((p) => ({
       ...p,
       games: gameMap.get(p.game_id) ?? null,
     }));
-
-    console.log("[adminListProducts] merged:", products.length, "products");
-    return products;
-  } catch (err) {
-    console.error("[adminListProducts] UNHANDLED:", err);
+  } catch {
     return [];
   }
 }
@@ -300,7 +229,6 @@ export async function adminListUsers() {
   return data ?? [];
 }
 
-// Admin product CRUD
 export async function adminCreateProduct(input: {
   game_id: string;
   name: string;
@@ -348,17 +276,11 @@ export async function adminUpdateProduct(id: string, input: {
   min_quantity?: number | null;
   price_per_unit?: number | null;
 }) {
-  const { error } = await supabase
-    .from("products")
-    .update(input)
-    .eq("id", id);
+  const { error } = await supabase.from("products").update(input).eq("id", id);
   if (error) throw new Error(error.message);
 }
 
 export async function adminDeleteProduct(id: string) {
-  const { error } = await supabase
-    .from("products")
-    .delete()
-    .eq("id", id);
+  const { error } = await supabase.from("products").delete().eq("id", id);
   if (error) throw new Error(error.message);
 }

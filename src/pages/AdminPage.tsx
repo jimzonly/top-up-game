@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Receipt,
@@ -115,7 +116,22 @@ const emptyProductForm: ProductForm = {
 export default function AdminPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [section, setSection] = useState<Section>("dashboard");
+  const location = useLocation();
+
+  const sectionFromPath = (): Section => {
+    const path = location.pathname;
+    if (path.includes("/admin/products")) return "products";
+    if (path.includes("/admin/transactions")) return "transactions";
+    if (path.includes("/admin/settings")) return "settings";
+    return "dashboard";
+  };
+
+  const [section, setSection] = useState<Section>(sectionFromPath);
+
+  useEffect(() => {
+    setSection(sectionFromPath());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   // Product CRUD state
   const [productDialogOpen, setProductDialogOpen] = useState(false);

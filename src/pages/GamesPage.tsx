@@ -15,10 +15,6 @@ export default function GamesPage() {
   });
   const products = productsQuery.data ?? [];
 
-  console.log("[GamesPage] productsQuery status:", productsQuery.status,
-    "| data:", products.length, "items",
-    "| error:", productsQuery.error?.message ?? "none");
-
   // Group products by game
   const productsByGame: Record<string, any[]> = {};
   for (const p of products) {

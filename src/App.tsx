@@ -40,6 +40,9 @@ export default function App() {
       {/* Admin routes — own layout with sidebar, no site header/footer */}
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<AdminPage />} />
+        <Route path="products" element={<AdminPage />} />
+        <Route path="transactions" element={<AdminPage />} />
+        <Route path="settings" element={<AdminPage />} />
       </Route>
 
       {/* Public routes — site header/footer */}

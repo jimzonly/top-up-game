@@ -20,11 +20,6 @@ export default function HomePage() {
   });
   const products = productsQuery.data ?? [];
 
-  console.log("[HomePage] productsQuery status:", productsQuery.status,
-    "| data:", products.length, "items",
-    "| error:", productsQuery.error?.message ?? "none",
-    "| fetchStatus:", productsQuery.fetchStatus);
-
   const [q, setQ] = useState("");
   const filtered = games.filter(
     (g) =>
